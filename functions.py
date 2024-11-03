@@ -5,20 +5,12 @@ import cv2
 from skimage import color
 from skimage.metrics import structural_similarity as ssim
 
-def compare_images_delta_e(image):
-    opencv_image = function_hw1(image, 'opencv')
-    manual_image = function_hw1(image, 'manual')
-    delta_e = color.deltaE_cie76(color.rgb2lab(opencv_image), color.rgb2lab(manual_image))
+def compare_images_delta_e(image_1, image_2):
+    delta_e = color.deltaE_cie76(color.rgb2lab(image_1), color.rgb2lab(image_2))
     return delta_e.astype(np.uint8)
 
-
-def generate_difference_heatmap(image):
-    opencv_image = function_hw1(image, 'opencv')
-    manual_image = function_hw1(image, 'manual')
-    diff = np.abs(opencv_image.astype(np.float32) - manual_image.astype(np.float32))
-    print("差异值最小值：", diff.min())
-    print("差异值最大值：", diff.max())
-
+def generate_difference_heatmap(image_1, image_2):
+    diff = np.abs(image_1.astype(np.float32) - image_2.astype(np.float32))
     heatmap = cv2.applyColorMap(diff.astype(np.uint8), cv2.COLORMAP_JET)
     return heatmap
 
@@ -127,14 +119,207 @@ def hsl_to_rgb(H, S, L):
     
     return np.stack([R, G, B], axis=-1)
      
+def Nearest_Neighbor_Interpolation(input_image, scale):
+    H, W = input_image.shape[:2]
+    new_W, new_H = int(W * scale), int(H * scale)
+    output_image = np.zeros((new_H, new_W, 3), dtype=input_image.dtype)
     
-
-def function_hw2(input_image):
-    if input_image is None:
-        raise gr.Error('��������ڴ���֮ǰ��������һ��ͼ��', duration=5)    
-    output_image = input_image
-    # �벹����ҵ2��ͼ��������
+    row_indices, col_indices = np.meshgrid(
+        np.arange(new_H), np.arange(new_W), indexing='ij'
+    )
+    
+    # 将新图的坐标映射到原图
+    original_row_indices = (row_indices / scale).astype(int)
+    original_col_indices = (col_indices / scale).astype(int)
+    
+    # 限制索引，防止越界
+    original_row_indices = np.clip(original_row_indices, 0, H - 1)
+    original_col_indices = np.clip(original_col_indices, 0, W - 1)
+    
+    # 使用高级索引从原图中获取对应的像素
+    output_image = input_image[original_row_indices, original_col_indices]
+    
     return output_image
+    
+def Bilinear_Resize(image, scale_factor):
+    original_height, original_width = image.shape[:2]
+    
+    # 计算新图的尺寸
+    new_height = int(original_height * scale_factor)
+    new_width = int(original_width * scale_factor)
+    
+    # 生成新图的网格坐标
+    row_indices, col_indices = np.meshgrid(
+        np.arange(new_height), np.arange(new_width), indexing='ij'
+    )
+    
+    # 将新图的坐标映射到原图的浮点坐标
+    original_row_coords = row_indices * (original_height / new_height)
+    original_col_coords = col_indices * (original_width / new_width)
+    
+    # 计算浮点坐标的整数部分（左上角）和小数部分
+    row_floor = np.floor(original_row_coords).astype(int)
+    col_floor = np.floor(original_col_coords).astype(int)
+    row_ceil = np.clip(row_floor + 1, 0, original_height - 1)
+    col_ceil = np.clip(col_floor + 1, 0, original_width - 1)
+    
+    # 小数部分
+    dy = original_row_coords - row_floor
+    dx = original_col_coords - col_floor
+    
+    # 获取四个邻近像素的值
+    top_left = image[row_floor, col_floor]
+    top_right = image[row_floor, col_ceil]
+    bottom_left = image[row_ceil, col_floor]
+    bottom_right = image[row_ceil, col_ceil]
+    
+    # 进行双线性插值
+    top = (1 - dx[:, :, None]) * top_left + dx[:, :, None] * top_right
+    bottom = (1 - dx[:, :, None]) * bottom_left + dx[:, :, None] * bottom_right
+    output_image = (1 - dy)[:, :, None] * top + dy[:, :, None] * bottom
+    
+    return output_image.astype(image.dtype)
+
+def bicubic_weight(x):
+    x = np.abs(x)
+    w = np.zeros_like(x)
+    mask1 = (x <= 1)
+    mask2 = (x > 1) & (x < 2)
+    
+    w[mask1] = (1.5 * x[mask1] ** 3 - 2.5 * x[mask1] ** 2 + 1)
+    w[mask2] = (-0.5 * x[mask2] ** 3 +2.5 * x[mask2] ** 2 - 4 * x[mask2] + 2)
+    
+    return w
+
+def bicubic_resize(image, scale_factor):
+    # 获取原图的尺寸
+    original_height, original_width = image.shape[:2]
+    
+    # 计算新图的尺寸
+    new_height = int(original_height * scale_factor)
+    new_width = int(original_width * scale_factor)
+    
+    # 生成新图的网格坐标
+    row_indices, col_indices = np.meshgrid(
+        np.arange(new_height), np.arange(new_width), indexing='ij'
+    )
+    
+    # 将新图的坐标映射到原图的浮点坐标
+    original_row_coords = row_indices * (original_height / new_height)
+    original_col_coords = col_indices * (original_width / new_width)
+    
+    # 取整并计算偏移
+    row_floor = np.floor(original_row_coords).astype(int)
+    col_floor = np.floor(original_col_coords).astype(int)
+    dy = original_row_coords - row_floor
+    dx = original_col_coords - col_floor
+    
+    # 扩展 dy 和 dx 到 4x4 邻域
+    dy_grid = dy[:, :, None] - np.array([-1, 0, 1, 2])[None, None, :]
+    dx_grid = dx[:, :, None] - np.array([-1, 0, 1, 2])[None, None, :]
+    
+    # 计算行和列方向的权重
+    weight_row = bicubic_weight(dy_grid)  # (new_height, new_width, 4)
+    weight_col = bicubic_weight(dx_grid)  # (new_height, new_width, 4)
+    
+    # 计算最终的权重
+    weights = weight_row[:, :, :, None] * weight_col[:, :, None, :]
+    
+    # 获取邻域的 4x4 像素网格坐标
+    row_indices = np.clip(row_floor[:, :, None] + np.array([-1, 0, 1, 2])[None, None, :], 0, original_height - 1)
+    col_indices = np.clip(col_floor[:, :, None] + np.array([-1, 0, 1, 2])[None, None, :], 0, original_width - 1)
+    
+    # 使用高级索引从原图中提取 4x4 邻域像素
+    neighborhood = image[row_indices[:, :, :, None], col_indices[:, :, None, :]]
+    
+    weighted_sum = np.sum(weights[..., None] * neighborhood, axis=(2, 3))
+    normalization = np.sum(weights, axis=(2, 3))
+    
+    # 防止除以零
+    output_image = np.where(normalization[..., None] > 0, weighted_sum / normalization[..., None], 0)
+    output_image = output_image.clip(0, 255).astype(np.uint8)
+    return output_image
+
+def lanczos_kernel(x, kernel_size=3):
+    x = np.abs(x)
+    result = np.where(x < kernel_size, np.sinc(x) * np.sinc(x / kernel_size), 0)
+    return result
+
+def lanczos_resize(image, scale_factor, kernel_size=3):
+    h, w = image.shape[:2]
+    new_h, new_w = int(h * scale_factor), int(w * scale_factor)
+    
+    row_indices, col_indices = np.meshgrid(np.arange(new_h), np.arange(new_w), indexing='ij')
+    
+    origin_row_coord, origin_col_coord = row_indices / scale_factor, col_indices / scale_factor
+    
+    row_floor, col_floor = np.floor(origin_row_coord).astype(int), np.floor(origin_col_coord).astype(int)
+    
+    dx, dy = np.arange(-kernel_size + 1, kernel_size + 1), np.arange(-kernel_size + 1, kernel_size + 1) # 2 * kernel_size neighbor
+    
+    neighbor_row_coords = row_floor[:, :, None, None] + dx[None, None, :, None]
+    neighbor_col_coords = col_floor[:, :, None, None] + dy[None, None, None, :]
+    
+    neighbor_row_coords = np.clip(neighbor_row_coords, 0, h - 1)
+    neighbor_col_coords = np.clip(neighbor_col_coords, 0, w - 1)
+    
+    lanczos_row_weights = lanczos_kernel(origin_row_coord[:, :, None, None] - neighbor_row_coords, kernel_size)
+    lanczos_col_weights = lanczos_kernel(origin_col_coord[:, :, None, None] - neighbor_col_coords, kernel_size)
+    
+    weights = lanczos_row_weights * lanczos_col_weights
+    
+    neighborhood = image[neighbor_row_coords, neighbor_col_coords]
+    
+    weighted_sum = np.sum(weights[:, :, :, :, None] * neighborhood, axis=(2, 3))
+    normalization = np.sum(weights, axis=(2, 3))
+
+    # 防止除以零
+    output_image = np.where(normalization[:, :, None] > 0, weighted_sum / normalization[:, :, None], 0)
+    output_image = output_image.clip(0, 255).astype(np.uint8)
+    return output_image  
+
+
+def function_hw2(image, implementation, method, scale_factor, kernel_size=None, rotation_angle=0, shear_factor=0, transform_type='none'):
+    new_height = int(image.shape[0] * scale_factor)
+    new_width = int(image.shape[1] * scale_factor)
+    image_resized = image
+    
+    if implementation == 'opencv':
+        if method == 'NN':
+            interpolation = cv2.INTER_NEAREST
+        elif method == 'Bilinear':
+            interpolation = cv2.INTER_LINEAR
+        elif method == 'Bicubic':
+            interpolation = cv2.INTER_CUBIC
+        elif method == 'Lanczos':
+            interpolation = cv2.INTER_LANCZOS4
+        image_resized = cv2.resize(image, (new_width, new_height), interpolation=interpolation)
+        
+    elif implementation == 'manual':
+        if method == 'NN':
+            image_resized = Nearest_Neighbor_Interpolation(image, scale_factor)
+        elif method == 'Bilinear':
+            image_resized = Bilinear_Resize(image, scale_factor)
+        elif method == 'Bicubic':
+            image_resized = bicubic_resize(image, scale_factor)
+        elif method == 'Lanczos':
+            image_resized = lanczos_resize(image, scale_factor, kernel_size)
+
+    if transform_type == 'rotation':
+        angle_rad = np.deg2rad(rotation_angle)
+        center = (new_width / 2, new_height / 2)
+        rot_mat = cv2.getRotationMatrix2D(center, rotation_angle, 1.0)
+        transformed_image = cv2.warpAffine(image_resized, rot_mat, (new_width, new_height))
+    
+    elif transform_type == 'shear':
+        shear_mat = np.array([[1, shear_factor, 0], [0, 1, 0]], dtype=np.float32)
+        transformed_image = cv2.warpAffine(image_resized, shear_mat, (new_width, new_height))
+    else:
+        transformed_image = image_resized
+
+    return transformed_image
+
+
 
 def function_hw3(input_image):
     if input_image is None:
