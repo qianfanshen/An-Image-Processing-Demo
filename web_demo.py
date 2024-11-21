@@ -69,7 +69,7 @@ seafoam = Seafoam()
 HTML_DESCRIPTION = '''
 <div align=center>
 <h1 style="font-weight: 900; margin-bottom: 7px;">
-   图像处理网页演示工具
+   An Image Processing Demo
 </h1>
 <p>使用方式，在浏览器中打开 <a href="http://127.0.0.1:8080" target="_blank">http://127.0.0.1:8080</a> 即可</p>
 <p>作者: 沈千帆</p>
@@ -81,7 +81,7 @@ MD_DESCRIPTION = '''
 ## 此网页演示提供以下图像处理工具:
 - 作业1：色彩处理工具
 - 作业2：几何变换工具
-- 作业3：XXX工具
+- 作业3：基于GAN的图像生成工具
 - 作业4：XXX工具
 - 作业5：XXX工具
 '''
@@ -95,7 +95,7 @@ def main():
                 create_demo_hw1(function_hw1)        
             with gr.TabItem('作业2: 几何变换工具'):
                 create_demo_hw2(function_hw2)   
-            with gr.TabItem('作业3: XXX工具'):
+            with gr.TabItem('作业3: 基于GAN的图像生成工具'):
                 create_demo_hw3(function_hw3)  
             with gr.TabItem('作业4: XXX工具'):
                 create_demo_hw4(function_hw4) 

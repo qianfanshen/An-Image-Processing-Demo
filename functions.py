@@ -4,6 +4,12 @@ import gradio as gr
 import cv2
 from skimage import color
 from skimage.metrics import structural_similarity as ssim
+import torch
+from torchvision.utils import make_grid
+from torchvision.transforms import ToPILImage
+import numpy as np
+import torch.nn as nn
+import torchvision.utils as vutils
 
 def compare_images_delta_e(image_1, image_2):
     delta_e = color.deltaE_cie76(color.rgb2lab(image_1), color.rgb2lab(image_2))
@@ -319,14 +325,89 @@ def function_hw2(image, implementation, method, scale_factor, kernel_size=None, 
 
     return transformed_image
 
+# generator code
 
+class Generator(nn.Module):
+    def __init__(self, ngpu, nz=100, ngf=64, nc=3):
+        super(Generator, self).__init__()
+        self.ngpu = ngpu
+        self.main = nn.Sequential(
+            # input is Z, going into a convolution. nz x 1 x 1
+            nn.ConvTranspose2d(nz, ngf * 8, 4, 1, 0, bias=False),
+            nn.BatchNorm2d(ngf * 8),
+            nn.ReLU(True),
+            # state size. (ngf*8) x 4 x 4
+            nn.ConvTranspose2d(ngf * 8, ngf * 4, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf * 4),
+            nn.ReLU(True),
+            # state size. (ngf*4) x 8 x 8
+            nn.ConvTranspose2d(ngf * 4, ngf * 2, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf * 2),
+            nn.ReLU(True),
+            # state size. (ngf*2) x 16 x 16
+            nn.ConvTranspose2d(ngf * 2, ngf, 4, 2, 1, bias=False),
+            nn.BatchNorm2d(ngf),
+            nn.ReLU(True),
+            # state size. (ngf) x 32 x 32
+            nn.ConvTranspose2d(ngf, nc, 4, 2, 1, bias=False),
+            nn.Tanh()
+            # state size. (nc) x 64 x 64
+        )
 
-def function_hw3(input_image):
-    if input_image is None:
-        raise gr.Error('��������ڴ���֮ǰ��������һ��ͼ��', duration=5)   
-    output_image = input_image
-    # �벹����ҵ3��ͼ��������
-    return output_image
+    def forward(self, input):
+        return self.main(input)
+    
+def generate_image_from_seed(seed, test_batch_size):
+    # 加载训练好的GAN模型
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+    ngpu = 1
+    netG_test = Generator(ngpu).to(device)
+    netG_test.load_state_dict(torch.load('checkpoint/dcgan_checkpoint.pth', map_location=device))
+    netG_test.eval()  # 切换到评估模式
+    # generator.eval()
+    torch.manual_seed(seed)
+    noise = torch.randn(test_batch_size, 100, 1, 1, device=device)  # 假设输入是100维的噪声
+    with torch.no_grad():
+        fake = netG_test(noise).detach().cpu()
+
+    # 将生成的图像制作成网格以便可视化
+    vis = vutils.make_grid(fake, normalize=True)
+    return ToPILImage()(vis)
+
+def generate_editted_image(seed, test_batch_size, i=0, j=1):
+    # 加载生成器模型
+    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+    ngpu = 1
+    netG_test = Generator(ngpu).to(device)
+    netG_test.load_state_dict(torch.load('/DATA/sqf/An-Image-Processing-Demo/checkpoint/dcgan_checkpoint.pth', map_location=device))
+    netG_test.eval()
+    torch.manual_seed(seed)
+    # 随机生成64个噪声输入，生成对应的图像
+    nz = 100
+    noise = torch.randn(test_batch_size, nz, 1, 1, device=device)
+    # 选择一对具有相反性质的图像 (例如 A+ 和 A-)
+    noise_plus_A = noise[i].unsqueeze(0)  # 假设第 0 张图像具有属性 +A
+    noise_minus_A = noise[j].unsqueeze(0)  # 假设第 1 张图像具有属性 -A
+
+    # 计算编辑向量 vA
+    vA = noise_plus_A.mean(0) - noise_minus_A.mean(0)
+    edited_noise = noise + vA.unsqueeze(0)
+    with torch.no_grad():
+        edited_images = netG_test(edited_noise).detach().cpu()
+    vis = vutils.make_grid(edited_images, normalize=True)
+    return ToPILImage()(vis)
+    
+
+def function_hw3(seed, test_batch_size, is_editting=False, i=1, j=2):
+    try:
+        if is_editting == False:
+            generated_image = generate_image_from_seed(seed, test_batch_size)
+            return np.array(generated_image)
+        else:
+            generated_image = generate_editted_image(seed, test_batch_size, i-1, j-1)
+            return np.array(generated_image)
+    except Exception as e:
+        raise gr.Error(f"生成图像时出错: {e}")
 
 def function_hw4(input_image):
     if input_image is None:

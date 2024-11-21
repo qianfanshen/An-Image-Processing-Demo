@@ -201,18 +201,32 @@ def create_demo_hw2(process):
 
 def create_demo_hw3(process):
     with gr.Blocks() as demo:
-        gr.Markdown('## ��ҵ��: XXX����') 
+        gr.Markdown('## 作业三: 基于GAN的图像生成工具')
+        gr.Markdown('### Part1: 基于GAN的图像生成')
         with gr.Row():
             with gr.Column():
-                input_image = gr.Image(sources=['upload', 'webcam', 'clipboard'], type='numpy', label='����ͼ��')  
+                seed_input = gr.Number(label='输入种子 (seed)', value=0, precision=0)  # 用户输入种子
+                number_input = gr.Number(label='输入生成图片数量', value=64, precision=0)
             with gr.Column():
-                output_image = gr.Image(type='numpy', label='���ͼ��', interactive=False)
-                run_button = gr.Button(value='����')
-
-        run_button.click(fn=function_hw2,
-                        inputs=[input_image],
-                        outputs=[output_image])
+                output_image_gan = gr.Image(type='numpy', label='生成的图像', interactive=False)
+                run_button_gan = gr.Button(value='生成图像', variant="primary")
+                run_button_gan.click(fn=function_hw3,
+                         inputs=[seed_input, number_input],
+                         outputs=[output_image_gan])
+        gr.Markdown('### Part2: 用户自定义的图像编辑')
+        with gr.Row():
+            with gr.Column():
+                i_input = gr.Number(label='index of feature1', value=1, precision=0)  # 用户输入种子
+                j_input = gr.Number(label='index of feature2', value=2, precision=0)
+            with gr.Column():
+                output_image_gan_edit = gr.Image(type='numpy', label='编辑后的图像', interactive=False)
+                run_button_gan_edit = gr.Button(value='生成图像', variant="primary")
+                run_button_gan_edit.click(fn=function_hw3,
+                         inputs=[seed_input, number_input, gr.State(value=True), i_input, j_input],
+                         outputs=[output_image_gan_edit])
+    
     return demo
+
 
 def create_demo_hw4(process):
     with gr.Blocks() as demo:

@@ -24,3 +24,8 @@ python web_demo.py
 - The manual implementation and OpenCV implementation of **Nearest-Neighbors** / **Bilinear** / **Bicubic** / **Lanczos** interpolation method to resize images
 - Rotation of images
 - Shearing of images
+
+## HW3 Human Face Generation Using [DCGAN](https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html)
+- Generate Human Faces: Utilize the DCGAN architecture to generate an arbitrary number of human faces. Set a random seed that is used to control the generation process.
+
+- Face Feature Editing: Choose two generated faces that exhibit distinct features (e.g., gender, age, facial expressions, etc.) and use these examples to modify or edit the rest of the generated faces. 
