@@ -1,4 +1,4 @@
-#-*-coding: utf-8 -*-
+# -*-coding: utf-8 -*-
 import numpy as np
 import gradio as gr
 import cv2
@@ -11,14 +11,17 @@ import numpy as np
 import torch.nn as nn
 import torchvision.utils as vutils
 
+
 def compare_images_delta_e(image_1, image_2):
     delta_e = color.deltaE_cie76(color.rgb2lab(image_1), color.rgb2lab(image_2))
     return delta_e.astype(np.uint8)
+
 
 def generate_difference_heatmap(image_1, image_2):
     diff = np.abs(image_1.astype(np.float32) - image_2.astype(np.float32))
     heatmap = cv2.applyColorMap(diff.astype(np.uint8), cv2.COLORMAP_JET)
     return heatmap
+
 
 def blur_image(image, kernel_size=5):
     """
@@ -34,6 +37,7 @@ def blur_image(image, kernel_size=5):
     blurred_image = cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
     return blurred_image
 
+
 def sharpen_image(image):
     """
     使用锐化核对图像进行锐化。
@@ -45,10 +49,11 @@ def sharpen_image(image):
     - 锐化后的图像
     """
     kernel = np.array([[0, -1, 0],
-                       [-1, 5,-1],
+                       [-1, 5, -1],
                        [0, -1, 0]])
     sharpened_image = cv2.filter2D(image, -1, kernel)
     return sharpened_image
+
 
 def emboss_image(image):
     """
@@ -60,12 +65,13 @@ def emboss_image(image):
     返回：
     - 浮雕效果的图像
     """
-    kernel = np.array([[ -2, -1,  0],
-                       [ -1,  1,  1],
-                       [  0,  1,  2]])
+    kernel = np.array([[-2, -1, 0],
+                       [-1, 1, 1],
+                       [0, 1, 2]])
     embossed_image = cv2.filter2D(image, -1, kernel)
     embossed_image = cv2.add(embossed_image, 128)
     return embossed_image
+
 
 def function_hw1(input_image, method='opencv'):
     if input_image is None:
@@ -79,16 +85,17 @@ def function_hw1(input_image, method='opencv'):
         # output_image = cv2.cvtColor(image_HSL, cv2.COLOR_HLS2RGB)
     return output_image
 
+
 def rgb_to_hsl(image):
     image = image / 255.0
     R, G, B = image[:, :, 0], image[:, :, 1], image[:, :, 2]
     L = image.mean(axis=2)
-    
+
     S = np.zeros_like(L)
     S = 1 - (3 * np.min(image, axis=2) / (R + G + B + 1e-6))
-    
+
     H = np.zeros_like(L)
-    denominator = np.sqrt(R**2 + G**2 + B**2 - R * G - R * B - G * B) + 1e-6
+    denominator = np.sqrt(R ** 2 + G ** 2 + B ** 2 - R * G - R * B - G * B) + 1e-6
     cos_theta = (R - 0.5 * G - 0.5 * B) / denominator
     cos_theta = np.clip(cos_theta, -1, 1)
     H = np.arccos(cos_theta)
@@ -97,20 +104,22 @@ def rgb_to_hsl(image):
 
     return H, S, L
 
+
 def hsl_to_rgb(H, S, L):
     mask_1 = (H >= 0) & (H < 120.0)
     mask_2 = (H >= 120.0) & (H < 240.0)
     mask_3 = (H >= 240.0) & (H < 360.0)
-    
+
     H_ = H % 120
     tmp1 = L * (1.0 + S * np.cos(H_ / 180.0 * np.pi) / np.cos(np.pi / 3.0 - H / 180.0 * np.pi))
     tmp2 = L * (1.0 - S)
-    tmp3 = 3.0 * L - (tmp1 +tmp2)
+    tmp3 = 3.0 * L - (tmp1 + tmp2)
     tmp1 = np.clip(tmp1, 0, 1)
     tmp2 = np.clip(tmp2, 0, 1)
     tmp3 = np.clip(tmp3, 0, 1)
-    
-    R, G, B = np.zeros_like(tmp1, dtype=np.float32), np.zeros_like(tmp2, dtype=np.float32), np.zeros_like(tmp3, dtype=np.float32)
+
+    R, G, B = np.zeros_like(tmp1, dtype=np.float32), np.zeros_like(tmp2, dtype=np.float32), np.zeros_like(tmp3,
+                                                                                                          dtype=np.float32)
     R[mask_1] = tmp1[mask_1]
     G[mask_1] = tmp3[mask_1]
     B[mask_1] = tmp2[mask_1]
@@ -120,176 +129,184 @@ def hsl_to_rgb(H, S, L):
     R[mask_3] = tmp3[mask_3]
     G[mask_3] = tmp2[mask_3]
     B[mask_3] = tmp1[mask_3]
-    
+
     R, G, B = (R * 255).astype(np.uint8), (G * 255).astype(np.uint8), (B * 255).astype(np.uint8)
-    
+
     return np.stack([R, G, B], axis=-1)
-     
+
+
 def Nearest_Neighbor_Interpolation(input_image, scale):
     H, W = input_image.shape[:2]
     new_W, new_H = int(W * scale), int(H * scale)
     output_image = np.zeros((new_H, new_W, 3), dtype=input_image.dtype)
-    
+
     row_indices, col_indices = np.meshgrid(
         np.arange(new_H), np.arange(new_W), indexing='ij'
     )
-    
+
     # 将新图的坐标映射到原图
     original_row_indices = (row_indices / scale).astype(int)
     original_col_indices = (col_indices / scale).astype(int)
-    
+
     # 限制索引，防止越界
     original_row_indices = np.clip(original_row_indices, 0, H - 1)
     original_col_indices = np.clip(original_col_indices, 0, W - 1)
-    
+
     # 使用高级索引从原图中获取对应的像素
     output_image = input_image[original_row_indices, original_col_indices]
-    
+
     return output_image
-    
+
+
 def Bilinear_Resize(image, scale_factor):
     original_height, original_width = image.shape[:2]
-    
+
     # 计算新图的尺寸
     new_height = int(original_height * scale_factor)
     new_width = int(original_width * scale_factor)
-    
+
     # 生成新图的网格坐标
     row_indices, col_indices = np.meshgrid(
         np.arange(new_height), np.arange(new_width), indexing='ij'
     )
-    
+
     # 将新图的坐标映射到原图的浮点坐标
     original_row_coords = row_indices * (original_height / new_height)
     original_col_coords = col_indices * (original_width / new_width)
-    
+
     # 计算浮点坐标的整数部分（左上角）和小数部分
     row_floor = np.floor(original_row_coords).astype(int)
     col_floor = np.floor(original_col_coords).astype(int)
     row_ceil = np.clip(row_floor + 1, 0, original_height - 1)
     col_ceil = np.clip(col_floor + 1, 0, original_width - 1)
-    
+
     # 小数部分
     dy = original_row_coords - row_floor
     dx = original_col_coords - col_floor
-    
+
     # 获取四个邻近像素的值
     top_left = image[row_floor, col_floor]
     top_right = image[row_floor, col_ceil]
     bottom_left = image[row_ceil, col_floor]
     bottom_right = image[row_ceil, col_ceil]
-    
+
     # 进行双线性插值
     top = (1 - dx[:, :, None]) * top_left + dx[:, :, None] * top_right
     bottom = (1 - dx[:, :, None]) * bottom_left + dx[:, :, None] * bottom_right
     output_image = (1 - dy)[:, :, None] * top + dy[:, :, None] * bottom
-    
+
     return output_image.astype(image.dtype)
+
 
 def bicubic_weight(x):
     x = np.abs(x)
     w = np.zeros_like(x)
     mask1 = (x <= 1)
     mask2 = (x > 1) & (x < 2)
-    
+
     w[mask1] = (1.5 * x[mask1] ** 3 - 2.5 * x[mask1] ** 2 + 1)
-    w[mask2] = (-0.5 * x[mask2] ** 3 +2.5 * x[mask2] ** 2 - 4 * x[mask2] + 2)
-    
+    w[mask2] = (-0.5 * x[mask2] ** 3 + 2.5 * x[mask2] ** 2 - 4 * x[mask2] + 2)
+
     return w
+
 
 def bicubic_resize(image, scale_factor):
     # 获取原图的尺寸
     original_height, original_width = image.shape[:2]
-    
+
     # 计算新图的尺寸
     new_height = int(original_height * scale_factor)
     new_width = int(original_width * scale_factor)
-    
+
     # 生成新图的网格坐标
     row_indices, col_indices = np.meshgrid(
         np.arange(new_height), np.arange(new_width), indexing='ij'
     )
-    
+
     # 将新图的坐标映射到原图的浮点坐标
     original_row_coords = row_indices * (original_height / new_height)
     original_col_coords = col_indices * (original_width / new_width)
-    
+
     # 取整并计算偏移
     row_floor = np.floor(original_row_coords).astype(int)
     col_floor = np.floor(original_col_coords).astype(int)
     dy = original_row_coords - row_floor
     dx = original_col_coords - col_floor
-    
+
     # 扩展 dy 和 dx 到 4x4 邻域
     dy_grid = dy[:, :, None] - np.array([-1, 0, 1, 2])[None, None, :]
     dx_grid = dx[:, :, None] - np.array([-1, 0, 1, 2])[None, None, :]
-    
+
     # 计算行和列方向的权重
     weight_row = bicubic_weight(dy_grid)  # (new_height, new_width, 4)
     weight_col = bicubic_weight(dx_grid)  # (new_height, new_width, 4)
-    
+
     # 计算最终的权重
     weights = weight_row[:, :, :, None] * weight_col[:, :, None, :]
-    
+
     # 获取邻域的 4x4 像素网格坐标
     row_indices = np.clip(row_floor[:, :, None] + np.array([-1, 0, 1, 2])[None, None, :], 0, original_height - 1)
     col_indices = np.clip(col_floor[:, :, None] + np.array([-1, 0, 1, 2])[None, None, :], 0, original_width - 1)
-    
+
     # 使用高级索引从原图中提取 4x4 邻域像素
     neighborhood = image[row_indices[:, :, :, None], col_indices[:, :, None, :]]
-    
+
     weighted_sum = np.sum(weights[..., None] * neighborhood, axis=(2, 3))
     normalization = np.sum(weights, axis=(2, 3))
-    
+
     # 防止除以零
     output_image = np.where(normalization[..., None] > 0, weighted_sum / normalization[..., None], 0)
     output_image = output_image.clip(0, 255).astype(np.uint8)
     return output_image
+
 
 def lanczos_kernel(x, kernel_size=3):
     x = np.abs(x)
     result = np.where(x < kernel_size, np.sinc(x) * np.sinc(x / kernel_size), 0)
     return result
 
+
 def lanczos_resize(image, scale_factor, kernel_size=3):
     h, w = image.shape[:2]
     new_h, new_w = int(h * scale_factor), int(w * scale_factor)
-    
+
     row_indices, col_indices = np.meshgrid(np.arange(new_h), np.arange(new_w), indexing='ij')
-    
+
     origin_row_coord, origin_col_coord = row_indices / scale_factor, col_indices / scale_factor
-    
+
     row_floor, col_floor = np.floor(origin_row_coord).astype(int), np.floor(origin_col_coord).astype(int)
-    
-    dx, dy = np.arange(-kernel_size + 1, kernel_size + 1), np.arange(-kernel_size + 1, kernel_size + 1) # 2 * kernel_size neighbor
-    
+
+    dx, dy = np.arange(-kernel_size + 1, kernel_size + 1), np.arange(-kernel_size + 1,
+                                                                     kernel_size + 1)  # 2 * kernel_size neighbor
+
     neighbor_row_coords = row_floor[:, :, None, None] + dx[None, None, :, None]
     neighbor_col_coords = col_floor[:, :, None, None] + dy[None, None, None, :]
-    
+
     neighbor_row_coords = np.clip(neighbor_row_coords, 0, h - 1)
     neighbor_col_coords = np.clip(neighbor_col_coords, 0, w - 1)
-    
+
     lanczos_row_weights = lanczos_kernel(origin_row_coord[:, :, None, None] - neighbor_row_coords, kernel_size)
     lanczos_col_weights = lanczos_kernel(origin_col_coord[:, :, None, None] - neighbor_col_coords, kernel_size)
-    
+
     weights = lanczos_row_weights * lanczos_col_weights
-    
+
     neighborhood = image[neighbor_row_coords, neighbor_col_coords]
-    
+
     weighted_sum = np.sum(weights[:, :, :, :, None] * neighborhood, axis=(2, 3))
     normalization = np.sum(weights, axis=(2, 3))
 
     # 防止除以零
     output_image = np.where(normalization[:, :, None] > 0, weighted_sum / normalization[:, :, None], 0)
     output_image = output_image.clip(0, 255).astype(np.uint8)
-    return output_image  
+    return output_image
 
 
-def function_hw2(image, implementation, method, scale_factor, kernel_size=None, rotation_angle=0, shear_factor=0, transform_type='none'):
+def function_hw2(image, implementation, method, scale_factor, kernel_size=None, rotation_angle=0, shear_factor=0,
+                 transform_type='none'):
     new_height = int(image.shape[0] * scale_factor)
     new_width = int(image.shape[1] * scale_factor)
     image_resized = image
-    
+
     if implementation == 'opencv':
         if method == 'NN':
             interpolation = cv2.INTER_NEAREST
@@ -300,7 +317,7 @@ def function_hw2(image, implementation, method, scale_factor, kernel_size=None, 
         elif method == 'Lanczos':
             interpolation = cv2.INTER_LANCZOS4
         image_resized = cv2.resize(image, (new_width, new_height), interpolation=interpolation)
-        
+
     elif implementation == 'manual':
         if method == 'NN':
             image_resized = Nearest_Neighbor_Interpolation(image, scale_factor)
@@ -316,7 +333,7 @@ def function_hw2(image, implementation, method, scale_factor, kernel_size=None, 
         center = (new_width / 2, new_height / 2)
         rot_mat = cv2.getRotationMatrix2D(center, rotation_angle, 1.0)
         transformed_image = cv2.warpAffine(image_resized, rot_mat, (new_width, new_height))
-    
+
     elif transform_type == 'shear':
         shear_mat = np.array([[1, shear_factor, 0], [0, 1, 0]], dtype=np.float32)
         transformed_image = cv2.warpAffine(image_resized, shear_mat, (new_width, new_height))
@@ -325,8 +342,8 @@ def function_hw2(image, implementation, method, scale_factor, kernel_size=None, 
 
     return transformed_image
 
-# generator code
 
+# generator code
 class Generator(nn.Module):
     def __init__(self, ngpu, nz=100, ngf=64, nc=3):
         super(Generator, self).__init__()
@@ -356,7 +373,8 @@ class Generator(nn.Module):
 
     def forward(self, input):
         return self.main(input)
-    
+
+
 def generate_image_from_seed(seed, test_batch_size):
     # 加载训练好的GAN模型
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
@@ -374,12 +392,14 @@ def generate_image_from_seed(seed, test_batch_size):
     vis = vutils.make_grid(fake, normalize=True)
     return ToPILImage()(vis)
 
+
 def generate_editted_image(seed, test_batch_size, i=0, j=1):
     # 加载生成器模型
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
     ngpu = 1
     netG_test = Generator(ngpu).to(device)
-    netG_test.load_state_dict(torch.load('/DATA/sqf/An-Image-Processing-Demo/checkpoint/dcgan_checkpoint.pth', map_location=device))
+    netG_test.load_state_dict(
+        torch.load('/DATA/sqf/An-Image-Processing-Demo/checkpoint/dcgan_checkpoint.pth', map_location=device))
     netG_test.eval()
     torch.manual_seed(seed)
     # 随机生成64个噪声输入，生成对应的图像
@@ -396,7 +416,7 @@ def generate_editted_image(seed, test_batch_size, i=0, j=1):
         edited_images = netG_test(edited_noise).detach().cpu()
     vis = vutils.make_grid(edited_images, normalize=True)
     return ToPILImage()(vis)
-    
+
 
 def function_hw3(seed, test_batch_size, is_editting=False, i=1, j=2):
     try:
@@ -404,17 +424,141 @@ def function_hw3(seed, test_batch_size, is_editting=False, i=1, j=2):
             generated_image = generate_image_from_seed(seed, test_batch_size)
             return np.array(generated_image)
         else:
-            generated_image = generate_editted_image(seed, test_batch_size, i-1, j-1)
+            generated_image = generate_editted_image(seed, test_batch_size, i - 1, j - 1)
             return np.array(generated_image)
     except Exception as e:
         raise gr.Error(f"生成图像时出错: {e}")
 
-def function_hw4(input_image):
+
+def add_random_noise(image, noise_type='gaussian', mean=0, sigma=25):
+    if noise_type == 'gaussian':
+        # Add Gaussian noise
+        gaussian_noise = np.random.normal(mean, sigma, image.shape).astype(np.float32)
+        noisy_image = np.clip(image.astype(np.float32) + gaussian_noise, 0, 255)
+    elif noise_type == 'salt_pepper':
+        # Add Salt and Pepper noise
+        noisy_image = image.copy()
+        prob = 0.02
+        num_salt = np.ceil(prob * image.size * 0.5)
+        num_pepper = np.ceil(prob * image.size * 0.5)
+
+        # Salt noise
+        coords = [np.random.randint(0, i - 1, int(num_salt)) for i in image.shape]
+        noisy_image[coords[0], coords[1], :] = 255
+
+        # Pepper noise
+        coords = [np.random.randint(0, i - 1, int(num_pepper)) for i in image.shape]
+        noisy_image[coords[0], coords[1], :] = 0
+    elif noise_type == 'None':
+        noisy_image = image.copy()
+    else:
+        raise ValueError("Unsupported noise type. Use 'gaussian' or 'salt_pepper'")
+
+    return np.uint8(noisy_image)
+
+
+def bilateral_filter(image, d, sigma_s, sigma_c):
+    # Ensure the kernel size is odd
+    if d % 2 == 0:
+        d += 1
+
+    # Precompute Gaussian distance weights (space weights)
+    offset = d // 2
+    x, y = np.meshgrid(np.arange(-offset, offset + 1), np.arange(-offset, offset + 1))
+    space_weight = np.exp(-(x ** 2 + y ** 2) / (2 * sigma_s ** 2))
+    space_weight = np.repeat(space_weight[:, :, np.newaxis], 3, axis=2)
+    # Initialize the filtered image
+    filtered_image = np.zeros_like(image, dtype=np.float32)
+
+    # Pad the input image to handle borders (considering RGB channels)
+    padded_image = np.pad(image, ((offset, offset), (offset, offset), (0, 0)), mode='reflect')
+    height, width, channels = image.shape
+
+    for i in range(height):
+        for j in range(width):
+            # for c in range(channels):
+            # Extract the region of interest for the specific channel
+            roi = padded_image[i:i + d, j:j + d, :]
+
+            # Compute intensity weights based on the difference in pixel values for each channel
+            intensity_weight = np.exp(-((roi - image[i, j, :]) ** 2) / (2 * sigma_c ** 2))
+
+            # Compute the bilateral filter response
+            total_weight = space_weight * intensity_weight
+            total_weight /= np.sum(total_weight, axis=(0, 1))
+            filtered_pixel = np.sum(total_weight * roi, axis=(0, 1))
+
+            # Assign the filtered pixel to the output
+            filtered_image[i, j, :] = filtered_pixel
+
+    return np.uint8(filtered_image)
+
+
+def box_filter(image, kernel_size):
+    height, width, channels = image.shape
+    r = kernel_size // 2
+
+    # 构建积分图
+    integral_image = np.cumsum(np.cumsum(image, axis=0), axis=1)
+
+    # 对每个通道分别处理
+    filtered_image = np.zeros_like(image, dtype=np.float32)
+
+    for i in range(height):
+        for j in range(width):
+            # 定义窗口边界
+            y1, y2 = max(i - r, 0), min(i + r + 1, height)
+            x1, x2 = max(j - r, 0), min(j + r + 1, width)
+
+            # 计算窗口内的像素总和
+            sum_region = (
+                    integral_image[y2 - 1, x2 - 1, :]
+                    - (integral_image[y1 - 1, x2 - 1, :] if y1 > 0 else 0)
+                    - (integral_image[y2 - 1, x1 - 1, :] if x1 > 0 else 0)
+                    + (integral_image[y1 - 1, x1 - 1, :] if y1 > 0 and x1 > 0 else 0)
+            )
+
+                # 计算均值
+            filtered_image[i, j, :] = sum_region / ((y2 - y1) * (x2 - x1))
+
+    return filtered_image
+
+
+def guided_filter(I, P, kernel_size, eps=0.01):
+    I = I.astype(np.float32) / 255.
+    P = P.astype(np.float32) / 255.
+
+    mean_I = box_filter(I, kernel_size)
+    mean_P = box_filter(P, kernel_size)
+    corr_I = box_filter(I * I, kernel_size)
+    corr_IP = box_filter(I * P, kernel_size)
+    var_I = corr_I - mean_I * mean_I
+    cov_IP = corr_IP - mean_P * mean_I
+    a = cov_IP / (var_I + eps)
+    b = mean_P - a * mean_I
+    mean_a = box_filter(a, kernel_size)
+    mean_b = box_filter(b, kernel_size)
+    q = mean_a * I + mean_b
+    return (q * 255.0).astype(np.uint8)
+
+
+def function_hw4(input_image, method='bilateral', d=5, sigma_c=10, sigma_s=10):
     if input_image is None:
-        raise gr.Error('��������ڴ���֮ǰ��������һ��ͼ��', duration=5)
-    output_image = input_image
-    # �벹����ҵ4��ͼ��������
+        raise gr.Error('请上传一张图像', duration=5)
+    if method == 'bilateral_denoise':
+        output_image = bilateral_filter(input_image, d, sigma_s, sigma_c)
+    if method == 'bilateral_sharpen':
+        base_layer = bilateral_filter(input_image, d, sigma_s, sigma_c)
+        detail = input_image - base_layer
+        output_image = np.clip(input_image + detail, 0, 255).astype(np.uint8)
+    if method == 'guided_filter_denoise':
+        output_image = guided_filter(input_image, input_image, d)
+    if method == 'guided_filter_sharpen':
+        base_layer = guided_filter(input_image, input_image, d)
+        detail = input_image - base_layer
+        output_image = np.clip(input_image + detail, 0, 255).astype(np.uint8)
     return output_image
+
 
 def function_hw5(input_image):
     if input_image is None:

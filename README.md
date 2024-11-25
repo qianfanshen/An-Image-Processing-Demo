@@ -26,6 +26,11 @@ python web_demo.py
 - Shearing of images
 
 ## HW3 Human Face Generation Using [DCGAN](https://pytorch.org/tutorials/beginner/dcgan_faces_tutorial.html)
-- Generate Human Faces: Utilize the DCGAN architecture to generate an arbitrary number of human faces. Set a random seed that is used to control the generation process.
+- **Generate Human Faces**: Utilize the DCGAN architecture to generate an arbitrary number of human faces. Set a random seed that is used to control the generation process.
 
-- Face Feature Editing: Choose two generated faces that exhibit distinct features (e.g., gender, age, facial expressions, etc.) and use these examples to modify or edit the rest of the generated faces. 
+- **Face Feature Editing**: Choose two generated faces that exhibit distinct features (e.g., gender, age, facial expressions, etc.) and use these examples to modify or edit the rest of the generated faces.
+
+## HW4 Image Denoising and Sharpening Tools
+- **Adding Noise**: Introduce Gaussian noise or salt-and-pepper noise to the images to simulate real-world degradation.
+- **Denoising/Sharpening with Bilateral Filter**: Utilize the manual bilateral filter to reduce noise while preserving edges or to enhance image sharpness effectively.
+- **Denoising/Sharpening with Box-Filter-Based Guided Filte**r: Implement a guided filter based on box filtering for both noise removal and detail enhancement, ensuring edge preservation.
