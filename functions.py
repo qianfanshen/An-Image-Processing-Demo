@@ -518,7 +518,7 @@ def box_filter(image, kernel_size):
                     + (integral_image[y1 - 1, x1 - 1, :] if y1 > 0 and x1 > 0 else 0)
             )
 
-                # 计算均值
+            # 计算均值
             filtered_image[i, j, :] = sum_region / ((y2 - y1) * (x2 - x1))
 
     return filtered_image
@@ -560,9 +560,234 @@ def function_hw4(input_image, method='bilateral', d=5, sigma_c=10, sigma_s=10):
     return output_image
 
 
-def function_hw5(input_image):
+def calc_hists(img, num_bins=256):
+    hists = np.zeros(num_bins, dtype=int)
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            hists[img[i, j]] += 1
+    return hists
+
+
+def clip_hists(hists, threshold_ratio=10.0):
+    hists = hists.astype(np.float32)
+    hists_clip = hists.copy()
+    threshold_value = np.mean(hists) * threshold_ratio
+    hists_clip[hists_clip > threshold_value] = threshold_value
+    avg_extra = np.sum(hists - hists_clip) / hists.shape[0]
+    hists_clip += avg_extra
+    return hists_clip
+
+
+def he(img, bins=256):
+    hists = calc_hists(img, bins)
+    cdf_normalized = cal_cdf(hists)
+    img_ = np.zeros_like(img)
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            img_[i, j] = int(cdf_normalized[img[i, j]] * (bins - 1))
+    return img_
+
+
+def clhe(img, threshold=10.0, bins=256):
+    hists = calc_hists(img)
+    hists_clip = clip_hists(hists, threshold)
+    cdf_normalized = cal_cdf(hists_clip)
+    img_ = np.zeros_like(img)
+    for i in range(img.shape[0]):
+        for j in range(img.shape[1]):
+            img_[i, j] = int(cdf_normalized[img[i, j]] * (bins - 1))
+    return img_
+
+
+
+def ahe(img, block_size=8, bins=256):
+    H, W = img.shape
+    print(H, W)
+    tile_h = int(H / block_size)
+    tile_w =int(W / block_size)
+    print(tile_h, tile_w)
+    img_ = np.zeros_like(img)
+    map=np.zeros((block_size, block_size, bins), dtype=np.float32)
+    for i in range(block_size):
+        for j in range(block_size):
+            s_i , e_i = int(i * tile_h), int((i+1) * tile_h)
+            s_j , e_j = int(j * tile_w), int((j+1) * tile_w)
+            sub_img = img[s_i:e_i, s_j:e_j]
+            hists = calc_hists(sub_img, bins)
+            cdf_normalized = cal_cdf(hists)
+            map[i, j] = cdf_normalized * (bins -1)
+
+    for i in range(H):
+        for j in range(W):
+            index_i = int(i//tile_h)
+            index_j = int(j//tile_w)
+            if (i <= tile_h/2 and j <= tile_w/2) or (i<=tile_h/2 and j>=W-tile_w/2) or (i>=H-tile_h/2 and j<=tile_w/2) or (i>=H-tile_h/2 and j>=W-tile_w/2):
+                img_[i, j] = int(map[index_i, index_j, img[i, j]])
+            elif i<=tile_h/2 or i>=H-tile_h/2:
+
+                l_j = index_j if (j - index_j*tile_w)>tile_w/2  else index_j-1
+                r_j = l_j+1
+                w_l = 1 - (j - l_j * tile_w - tile_w/2) / tile_w
+                w_r = 1 - w_l
+                print(l_j, r_j, i, j,w_l, w_r)
+                print(index_i)
+                img_[i, j] = int(w_l*map[index_i, l_j, img[i, j]] + w_r*map[index_i, r_j, img[i, j]])
+            elif j<=tile_w/2 or j>=W-tile_w/2:
+                u_i = index_i if (i - index_i*tile_h)>tile_h/2 else index_i - 1
+                b_i = u_i + 1
+                w_u = 1 - (i - u_i* tile_h - tile_h/2) / tile_h
+                w_b = 1 - w_u
+                img_[i, j] = int(w_u * map[u_i, index_j, img[i, j]] + w_b * map[b_i, index_j, img[i, j]])
+            else:
+                l_j = index_j if j >= (j - index_j*tile_w)>tile_w/2 else index_j - 1
+                r_j =  l_j + 1
+                w_l = 1 - (j - l_j * tile_w-tile_w/2) / tile_w
+                w_r = 1 - w_l
+                u_i = index_i if (i - index_i*tile_h)>tile_h/2  else index_i - 1
+                b_i = u_i + 1
+                w_u = 1 - (i - u_i * tile_h-tile_h/2) / tile_h
+                w_b = 1 - w_u
+                img_[i,j] = int(w_l * (w_u * map[u_i, l_j, img[i, j]] + w_b * map[b_i, l_j, img[i, j]]) + w_r * (w_u * map[u_i, r_j, img[i, j]]  + w_b * map[b_i, r_j, img[i, j]] ))
+
+    return img_
+
+
+def clahe(img, block_size=8, threshold=10.0, bins=256):
+    H, W = img.shape
+    print(H, W)
+    tile_h = int(H / block_size)
+    tile_w = int(W / block_size)
+    print(tile_h, tile_w)
+    img_ = np.zeros_like(img)
+    map = np.zeros((block_size, block_size, bins), dtype=np.float32)
+    for i in range(block_size):
+        for j in range(block_size):
+            s_i, e_i = int(i * tile_h), int((i + 1) * tile_h)
+            s_j, e_j = int(j * tile_w), int((j + 1) * tile_w)
+            sub_img = img[s_i:e_i, s_j:e_j]
+            hists = calc_hists(sub_img, bins)
+            hists_clip = clip_hists(hists, threshold)
+            cdf_normalized = cal_cdf(hists_clip)
+            map[i, j] = cdf_normalized * (bins - 1)
+
+    for i in range(H):
+        for j in range(W):
+            index_i = int(i // tile_h)
+            index_j = int(j // tile_w)
+            if (i <= tile_h / 2 and j <= tile_w / 2) or (i <= tile_h / 2 and j >= W - tile_w / 2) or (
+                    i >= H - tile_h / 2 and j <= tile_w / 2) or (i >= H - tile_h / 2 and j >= W - tile_w / 2):
+                img_[i, j] = int(map[index_i, index_j, img[i, j]])
+            elif i <= tile_h / 2 or i >= H - tile_h / 2:
+
+                l_j = index_j if (j - index_j * tile_w) > tile_w / 2 else index_j - 1
+                r_j = l_j + 1
+                w_l = 1 - (j - l_j * tile_w - tile_w / 2) / tile_w
+                w_r = 1 - w_l
+                print(l_j, r_j, i, j, w_l, w_r)
+                print(index_i)
+                img_[i, j] = int(w_l * map[index_i, l_j, img[i, j]] + w_r * map[index_i, r_j, img[i, j]])
+            elif j <= tile_w / 2 or j >= W - tile_w / 2:
+                u_i = index_i if (i - index_i * tile_h) > tile_h / 2 else index_i - 1
+                b_i = u_i + 1
+                w_u = 1 - (i - u_i * tile_h - tile_h / 2) / tile_h
+                w_b = 1 - w_u
+                img_[i, j] = int(w_u * map[u_i, index_j, img[i, j]] + w_b * map[b_i, index_j, img[i, j]])
+            else:
+                l_j = index_j if j >= (j - index_j * tile_w) > tile_w / 2 else index_j - 1
+                r_j = l_j + 1
+                w_l = 1 - (j - l_j * tile_w - tile_w / 2) / tile_w
+                w_r = 1 - w_l
+                u_i = index_i if (i - index_i * tile_h) > tile_h / 2 else index_i - 1
+                b_i = u_i + 1
+                w_u = 1 - (i - u_i * tile_h - tile_h / 2) / tile_h
+                w_b = 1 - w_u
+                img_[i, j] = int(w_l * (w_u * map[u_i, l_j, img[i, j]] + w_b * map[b_i, l_j, img[i, j]]) + w_r * (
+                            w_u * map[u_i, r_j, img[i, j]] + w_b * map[b_i, r_j, img[i, j]]))
+
+    return img_
+
+
+def cal_cdf(hist):
+    cdf = np.cumsum(hist)
+    cdf_normalized = cdf / cdf[-1]
+    return cdf_normalized
+
+
+def hist_match_channel(target, reference):
+    target_hist, _ = np.histogram(target.flatten(), bins=256, range=[0, 256])
+    reference_hist, _ = np.histogram(reference.flatten(), bins=256, range=[0, 256])
+
+    target_cdf = cal_cdf(target_hist)
+    reference_cdf = cal_cdf(reference_hist)
+
+    # 创建一个映射表
+    mapping = np.zeros(256, dtype=np.uint8)
+
+    for i in range(256):
+        diff = np.abs(reference_cdf - target_cdf[i])
+        mapping[i] = np.argmin(diff)
+
+    matched_channel = mapping[target]
+
+    return matched_channel
+
+
+def hist_match(target, reference):
+    target_b, target_g, target_r = cv2.split(target)
+    reference_b, reference_g, reference_r = cv2.split(reference)
+
+    # 对每个通道进行直方图匹配
+    matched_b = hist_match_channel(target_b, reference_b)
+    matched_g = hist_match_channel(target_g, reference_g)
+    matched_r = hist_match_channel(target_r, reference_r)
+
+    # 合并三个通道，得到最终的匹配图像
+    matched_image = cv2.merge([matched_b, matched_g, matched_r])
+
+    return matched_image
+
+
+def function_hw5(input_image, reference, method='clahe', tile_size=8, clip_limit=10.0):
     if input_image is None:
-        raise gr.Error('��������ڴ���֮ǰ��������һ��ͼ��', duration=5)
-    output_image = input_image
-    # �벹����ҵ5��ͼ��������
+        raise gr.Error('请上传一张图像', duration=5)
+    if method in ['clahe', 'he', 'clhe', 'ahe']:
+        hsv_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2HSV)
+        v_channel = hsv_image[:, :, 2]
+        if method == 'clahe':
+            v_channel_clahe = clahe(v_channel, tile_size, clip_limit)
+            hsv_image[:, :, 2] = v_channel_clahe
+        elif method == 'he':
+            v_channel_he = he(v_channel)
+            hsv_image[:, :, 2] = v_channel_he
+        elif method == 'clhe':
+            v_channel_he = clhe(v_channel, clip_limit)
+            hsv_image[:, :, 2] = v_channel_he
+        elif method == 'ahe':
+            v_channel_he = ahe(v_channel, tile_size)
+            hsv_image[:, :, 2] = v_channel_he
+        hsv_image[:, :, 1] = (hsv_image[:, :, 1].astype(np.float32) * 1.2).clip(0, 255).astype(np.uint8)
+        output_image = cv2.cvtColor(hsv_image, cv2.COLOR_HSV2BGR)
+        # gray_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2GRAY)
+        # output_image = clahe(gray_image, tile_size, clip_limit)
+        # hsl_img = cv2.cvtColor(input_image, cv2.COLOR_BGR2HSV)
+        #
+        # # 分离出HSV的三个通道：色调(H)，饱和度(S)，亮度(L)
+        # h, s, l = cv2.split(hsl_img)
+        #
+        # # 创建CLAHE对象
+        # clahe = cv2.createCLAHE(clipLimit=clip_limit, tileGridSize=(tile_size, tile_size))
+        #
+        # # 对亮度通道（L）进行CLAHE处理
+        # l_clahe = clahe.apply(l)
+        #
+        # # 合并处理后的亮度通道与色调和饱和度通道
+        # hsl_img_clahe = cv2.merge([h, s, l_clahe])
+        #
+        # # 将图像从HSV转换回BGR
+        # output_image = cv2.cvtColor(hsl_img_clahe, cv2.COLOR_HSV2BGR)
+    elif method == 'match':
+        target_image = cv2.cvtColor(input_image, cv2.COLOR_BGR2RGB)
+        reference_image = cv2.cvtColor(reference, cv2.COLOR_BGR2RGB)
+        matched_image = hist_match(target_image, reference_image)
+        output_image = cv2.cvtColor(matched_image, cv2.COLOR_RGB2BGR)
     return output_image

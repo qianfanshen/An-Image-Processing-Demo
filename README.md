@@ -34,3 +34,8 @@ python web_demo.py
 - **Adding Noise**: Introduce Gaussian noise or salt-and-pepper noise to the images to simulate real-world degradation.
 - **Denoising/Sharpening with Bilateral Filter**: Utilize the manual bilateral filter to reduce noise while preserving edges or to enhance image sharpness effectively.
 - **Denoising/Sharpening with Box-Filter-Based Guided Filte**r: Implement a guided filter based on box filtering for both noise removal and detail enhancement, ensuring edge preservation.
+
+
+## HW5 Histogram Matching and Low-Light Enhancement tools
+- **Histogram Matching**: Apply the histogram matching algorithm to stylize your images by adjusting their histograms to match a reference style.
+- **Low-Light Enhancement tools**: Enhance underexposed images using advanced techniques such as HE, CLHE, AHE, and CLAHE to improve visibility and contrast in low-light conditions.

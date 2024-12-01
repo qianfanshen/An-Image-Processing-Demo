@@ -285,15 +285,31 @@ def create_demo_hw4(process):
 
 def create_demo_hw5(process):
     with gr.Blocks() as demo:
-        gr.Markdown('## ��ҵ��: XXX����')
+        gr.Markdown('## 作业5: 图像提亮工具')
+        gr.Markdown('### Part1: 直方图匹配工具')
         with gr.Row():
             with gr.Column():
-                input_image = gr.Image(sources=['upload', 'webcam', 'clipboard'], type='numpy', label='����ͼ��')
+                input_image_target = gr.Image(sources=['upload', 'webcam', 'clipboard'], type='numpy', label='输入图像')
             with gr.Column():
-                output_image = gr.Image(type='numpy', label='���ͼ��', interactive=False)
-                run_button = gr.Button(value='����')
-
-        run_button.click(fn=process,
-                         inputs=[input_image],
-                         outputs=[output_image])
+                input_image_reference = gr.Image(sources=['upload', 'webcam', 'clipboard'], type='numpy', label='参考图像')
+            with gr.Column():
+                output_image_target = gr.Image(type='numpy', label='直方图匹配输出', interactive=False)
+                run_button_match = gr.Button(value='Stylize!', variant="primary")
+                run_button_match.click(fn=function_hw5,
+                                       inputs=[input_image_target, input_image_reference, gr.State(value='match')],
+                                       outputs=[output_image_target])
+        gr.Markdown('### Part2: CLAHE工具')
+        with gr.Row():
+            with gr.Column():
+                input_image_clahe = gr.Image(sources=['upload', 'webcam', 'clipboard'], type='numpy', label='输入图像')
+            with gr.Column():
+                lighten_method = gr.Dropdown(choices=['he', 'clhe', 'ahe', 'clahe'], label='选择提亮算法')
+                filter_size = gr.Slider(minimum=4, maximum=8, step=2, value=8, label="size of filter")
+                clip_limit = gr.Slider(minimum=1, maximum=20, step=1, value=10, label="直方图裁切阈值")
+            with gr.Column():
+                output_image_clahe = gr.Image(type='numpy', label='提亮输出', interactive=False)
+                run_button_clahe = gr.Button(value='Enhance!', variant="primary")
+                run_button_clahe.click(fn=function_hw5,
+                                       inputs=[input_image_clahe,input_image_clahe, lighten_method, filter_size, clip_limit],
+                                       outputs=[output_image_clahe])
     return demo
